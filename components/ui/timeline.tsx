@@ -1,24 +1,37 @@
 "use client";
-import React, { useState, useCallback, useEffect, useRef, createContext, useContext } from "react";
+
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  createContext,
+  useContext,
+} from "react";
 import { motion, useMotionValue, animate, useInView } from "framer-motion";
 import { cn } from "@/lib/utils";
 
-const TimelineContext = createContext<{
-  textRef: React.RefObject<HTMLDivElement>;
+// ---------------- Timeline Context ----------------
+interface TimelineContextType {
+  textRef: React.RefObject<HTMLDivElement | null>;
   leftPos: number;
   rightPos: number;
   textHeight: number;
   handleWidth: number;
-  handleLeftStart: (clientX: number) => void;
-  handleRightStart: (clientX: number) => void;
-} | null>(null);
+  handleLeftStart: (x: number) => void;
+  handleRightStart: (x: number) => void;
+}
+
+const TimelineContext = createContext<TimelineContextType | null>(null);
 
 const useTimelineContext = () => {
   const context = useContext(TimelineContext);
-  if (!context) throw new Error("Timeline components must be used within a Timeline");
+  if (!context)
+    throw new Error("Timeline components must be used within a Timeline");
   return context;
 };
 
+// ---------------- Timeline Component ----------------
 interface TimelineProps {
   children: React.ReactNode;
   rotation?: number;
@@ -44,17 +57,17 @@ const Timeline: React.FC<TimelineProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rightMotion = useMotionValue(0);
   const isInView = useInView(containerRef, { amount: 0.3 });
+
   const [textWidth, setTextWidth] = useState(0);
   const [textHeight, setTextHeight] = useState(0);
   const [leftPos, setLeftPos] = useState(initialLeft);
   const [rightPos, setRightPos] = useState(0);
   const handleWidth = 28;
 
-  useEffect(() => {
-    const unsubscribe = rightMotion.onChange((v) => setRightPos(v));
-    return unsubscribe;
-  }, [rightMotion]);
+  // Update rightPos when motion value changes
+  useEffect(() => rightMotion.onChange((v) => setRightPos(v)), [rightMotion]);
 
+  // Measure text dimensions
   useEffect(() => {
     const measureText = () => {
       if (!textRef.current) return;
@@ -71,26 +84,33 @@ const Timeline: React.FC<TimelineProps> = ({
     return () => window.removeEventListener("resize", measureText);
   }, [children, rightMotion]);
 
+  // Animate right handle based on inView
   useEffect(() => {
     if (!textWidth) return;
     const fullRight = textWidth + handleWidth * 2;
     if (isInView) {
-      animate(rightMotion, fullRight, { duration: 0.6, ease: [0.22, 1, 0.36, 1] });
+      animate(rightMotion, fullRight, {
+        duration: 0.6,
+        ease: [0.22, 1, 0.36, 1],
+      });
     } else {
       animate(rightMotion, leftPos + minWidth, { duration: 0.6, ease: "easeInOut" });
     }
   }, [isInView, textWidth, leftPos, minWidth, rightMotion]);
 
+  // Handle left drag
   const handleLeftStart = useCallback(
     (clientX: number) => {
       rightMotion.stop();
       const startLeft = leftPos;
       const startX = clientX;
+
       const handleMove = (x: number) => {
         let newLeft = startLeft + (x - startX);
         newLeft = Math.max(0, Math.min(newLeft, rightPos - minWidth));
         setLeftPos(newLeft);
       };
+
       const mouseMove = (e: MouseEvent) => handleMove(e.clientX);
       const touchMove = (e: TouchEvent) => handleMove(e.touches[0].clientX);
       const end = () => {
@@ -101,28 +121,33 @@ const Timeline: React.FC<TimelineProps> = ({
         document.body.style.cursor = "";
         document.body.style.userSelect = "";
       };
+
       document.addEventListener("mousemove", mouseMove);
       document.addEventListener("mouseup", end);
       document.addEventListener("touchmove", touchMove);
       document.addEventListener("touchend", end);
+
       document.body.style.cursor = "ew-resize";
       document.body.style.userSelect = "none";
     },
     [leftPos, rightPos, minWidth, rightMotion]
   );
 
+  // Handle right drag
   const handleRightStart = useCallback(
     (clientX: number) => {
       rightMotion.stop();
       const startRight = rightPos;
       const startX = clientX;
       const maxRight = textWidth + handleWidth * 2;
+
       const handleMove = (x: number) => {
         let newRight = startRight + (x - startX);
         newRight = Math.max(leftPos + minWidth, Math.min(newRight, maxRight));
         setRightPos(newRight);
         rightMotion.set(newRight);
       };
+
       const mouseMove = (e: MouseEvent) => handleMove(e.clientX);
       const touchMove = (e: TouchEvent) => handleMove(e.touches[0].clientX);
       const end = () => {
@@ -133,10 +158,12 @@ const Timeline: React.FC<TimelineProps> = ({
         document.body.style.cursor = "";
         document.body.style.userSelect = "";
       };
+
       document.addEventListener("mousemove", mouseMove);
       document.addEventListener("mouseup", end);
       document.addEventListener("touchmove", touchMove);
       document.addEventListener("touchend", end);
+
       document.body.style.cursor = "ew-resize";
       document.body.style.userSelect = "none";
     },
@@ -177,32 +204,46 @@ const Timeline: React.FC<TimelineProps> = ({
               height: `${textHeight}px`,
             }}
           >
+            {/* Left handle */}
             <motion.div
               className={cn(
                 "absolute left-0 top-0 w-7 border border-black rounded-full bg-background flex items-center justify-center cursor-ew-resize z-20 select-none",
                 handleClassName
               )}
-              onMouseDown={(e: React.MouseEvent<HTMLDivElement>) => handleLeftStart(e.clientX)}
-              onTouchStart={(e: React.TouchEvent<HTMLDivElement>) => handleLeftStart(e.touches[0].clientX)}
+              onMouseDown={(e) => handleLeftStart(e.clientX)}
+              onTouchStart={(e) => handleLeftStart(e.touches[0].clientX)}
               style={{ height: `${textHeight}px` }}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
-              <div className={cn("w-2 h-8 rounded-full bg-black pointer-events-none", handleIndicatorClassName)} />
+              <div
+                className={cn(
+                  "w-2 h-8 rounded-full bg-black pointer-events-none",
+                  handleIndicatorClassName
+                )}
+              />
             </motion.div>
+
+            {/* Right handle */}
             <motion.div
               className={cn(
                 "absolute right-0 top-0 w-7 border border-black rounded-full bg-background flex items-center justify-center cursor-ew-resize z-20 select-none",
                 handleClassName
               )}
-              onMouseDown={(e: React.MouseEvent<HTMLDivElement>) => handleRightStart(e.clientX)}
-              onTouchStart={(e: React.TouchEvent<HTMLDivElement>) => handleRightStart(e.touches[0].clientX)}
+              onMouseDown={(e) => handleRightStart(e.clientX)}
+              onTouchStart={(e) => handleRightStart(e.touches[0].clientX)}
               style={{ height: `${textHeight}px` }}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
-              <div className={cn("w-2 h-8 rounded-full bg-black pointer-events-none", handleIndicatorClassName)} />
+              <div
+                className={cn(
+                  "w-2 h-8 rounded-full bg-black pointer-events-none",
+                  handleIndicatorClassName
+                )}
+              />
             </motion.div>
+
             {children}
           </div>
         </div>
@@ -211,6 +252,7 @@ const Timeline: React.FC<TimelineProps> = ({
   );
 };
 
+// ---------------- TimelineText Component ----------------
 interface TimelineTextProps {
   children: React.ReactNode;
   className?: string;
@@ -231,4 +273,5 @@ const TimelineText: React.FC<TimelineTextProps> = ({ children, className }) => {
   );
 };
 
+// ---------------- Exports ----------------
 export { Timeline, TimelineText };
